@@ -79,13 +79,24 @@ return function(queryPoint: Vector2, gui: TextBox | TextLabel | TextButton): { n
 	end
 
 	-- Return the text color since we're probably inside the text area
-	-- However, text is not a solid so we blend partially with the background color
-	-- Density depends on font weight but we'll just do 60% text and 40% background
+	-- However, text is not a solid so we just force it to be partially transparent
 	local textColor = gui.TextColor3
-	return {
-		(0.6 * textColor.R) + (0.4 * color[1]),
-		(0.6 * textColor.G) + (0.4 * color[2]),
-		(0.6 * textColor.B) + (0.4 * color[3]),
-		textAlpha,
-	}
+
+	if color[4] > 0 then
+		-- We can blend with our background
+		return {
+			(0.6 * textColor.R) + (0.4 * color[1]),
+			(0.6 * textColor.G) + (0.4 * color[2]),
+			(0.6 * textColor.B) + (0.4 * color[3]),
+			textAlpha,
+		}
+	else
+		-- We don't have a background, so we can just be partially transparent
+		return {
+			textColor.R,
+			textColor.G,
+			textColor.B,
+			textAlpha * 0.6,
+		}
+	end
 end
