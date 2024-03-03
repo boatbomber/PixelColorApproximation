@@ -3,7 +3,7 @@ local AssetService = game:GetService("AssetService")
 local Utils = require(script.Parent.Parent.Utils)
 local defaultHandler = require(script.Parent.default)
 
-local DOWNSCALE_FACTOR = 0.1 -- Sample images at 10% resolution to improve performance
+local DOWNSCALE_FACTOR = 0.5 -- Sample images at half resolution to improve performance
 
 local imageCache = {}
 return function(queryPoint: Vector2, gui: ImageLabel | ImageButton): { number }
