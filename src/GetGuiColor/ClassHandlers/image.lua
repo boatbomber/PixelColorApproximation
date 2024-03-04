@@ -13,6 +13,10 @@ return function(queryPoint: Vector2, gui: ImageLabel | ImageButton): { number }
 	end
 
 	local success, image = pcall(function()
+		if gui:FindFirstChildWhichIsA("EditableImage") then
+			return gui:FindFirstChildWhichIsA("EditableImage")
+		end
+
 		if imageCache[gui.Image] then
 			return imageCache[gui.Image]
 		end
