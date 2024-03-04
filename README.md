@@ -1,6 +1,8 @@
 # PixelColorApproximation
 
-Rough approximation of pixel colors in Roblox
+Rough approximation of pixel colors in Roblox.
+
+[Please consider supporting my work.](https://github.com/sponsors/boatbomber)
 
 Here is a direct comparison. The real pixel values (aka a screenshot of my actual screen) vs the approximated colors from this module.
 
