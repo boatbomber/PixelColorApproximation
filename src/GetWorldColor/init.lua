@@ -1,25 +1,63 @@
+--!strict
+--!native
+--!optimize 2
+
 local Terrain = workspace.Terrain
+local CurrentWorkspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
 local AssetService = game:GetService("AssetService")
 
-local skyboxResolution: number = 44
-local skybox: Model? = nil
+local skyboxResolution: number, skyboxBucketCellSize: number = 40, 1
+local skybox: Model | nil, skyboxBuckets, skyboxFaces = nil, {}, {}
+
+local raycastParams = RaycastParams.new()
+raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+raycastParams.IgnoreWater = false
+
+local raycastParamsSkybox = RaycastParams.new()
+raycastParamsSkybox.FilterType = Enum.RaycastFilterType.Include
+
+local V3 = Vector3.new
+local V2 = Vector2.new
+local clamp = math.clamp
+local floor = math.floor
+local color3new = Color3.new
+local color3fromHEX = Color3.fromHex
+local color3fromHSV = Color3.fromHSV
 
 local function lerp(a: number, b: number, alpha: number)
 	return a + (b - a) * alpha
 end
 
+local function hash2D(position: Vector2, cellSize: number): string
+	local x = floor(position.X / cellSize)
+	local y = floor(position.Y / cellSize)
+
+	--
+
+	return x .. "_" .. y
+end
+
 local function createSkybox()
-	local skyboxFaceData = {["SkyboxBk"] = {["Position"] = Vector3.new(0, -0, 0.5), ["Orientation"] = Vector3.new(0, 0, 180)}, ["SkyboxFt"] = {["Position"] = Vector3.new(0, -0, -0.5), ["Orientation"] = Vector3.new(0, 180, 180)}, ["SkyboxLf"] = {["Position"] = Vector3.new(-0.5, -0, 0), ["Orientation"] = Vector3.new(0, -90, 180)}, ["SkyboxRt"] = {["Position"] = Vector3.new(0.5, -0, 0), ["Orientation"] = Vector3.new(0, 90, 180)}, ["SkyboxDn"] = {["Position"] = Vector3.new(0, -0.5, 0), ["Orientation"] = Vector3.new(90, 90, 0)}, ["SkyboxUp"] = {["Position"] = Vector3.new(0, 0.5, 0), ["Orientation"] = Vector3.new(-90, 90, 0)}}
-	if skybox ~= nil then return end
+	if skybox ~= nil then
+		skybox:Destroy()
+		skybox = nil
+	end
+	
+	for i,bucket in pairs(skyboxBuckets) do
+		table.clear(bucket)
+	end
+	
+	local skyboxFaceData = {["SkyboxBk"] = {["Position"] = V3(0, -0, 0.5), ["Orientation"] = V3(0, 0, 180)}, ["SkyboxFt"] = {["Position"] = V3(0, -0, -0.5), ["Orientation"] = V3(0, 180, 180)}, ["SkyboxLf"] = {["Position"] = V3(-0.5, -0, 0), ["Orientation"] = V3(0, -90, 180)}, ["SkyboxRt"] = {["Position"] = V3(0.5, -0, 0), ["Orientation"] = V3(0, 90, 180)}, ["SkyboxDn"] = {["Position"] = V3(0, -0.5, 0), ["Orientation"] = V3(90, 90, 0)}, ["SkyboxUp"] = {["Position"] = V3(0, 0.5, 0), ["Orientation"] = V3(-90, 90, 0)}}
 		
 	skybox = Instance.new("Model")
+	if skybox == nil then return end -- typechecking
 	skybox.Name = "GetWorldColorSkybox"
 		
 	for i,v in pairs(skyboxFaceData) do
 		local face = Instance.new("Part")
 		face.Name = i
-		face.Size = Vector3.new(1, 1, 0.001144)
+		face.Size = V3(1, 1, 0)
 		face.CanTouch = false
 		face.CanCollide = false
 		face.Transparency = 1
@@ -39,7 +77,10 @@ local function createSkybox()
 		face.Parent = skybox
 	end
 		
-	skybox.Parent = game.Workspace.Terrain
+	skybox.Parent = Terrain
+	
+	skyboxFaces = skybox:GetChildren()
+	raycastParamsSkybox.FilterDescendantsInstances = skyboxFaces
 end
 
 local function updateSkyboxImages()
@@ -57,55 +98,67 @@ local function updateSkyboxImages()
 
 	--
 
-	for i,v in pairs(skybox:GetChildren()) do
-		-- Create EditableImages for each skybox face and insert into skybox
+	for i,v in pairs(skyboxFaces) do
+		-- Create EditableImages for each skybox face
 
 		local image = AssetService:CreateEditableImageAsync(currentSkybox[v.Name])
-		image:Resize(Vector2.new(skyboxResolution, skyboxResolution))
+		image:Resize(V2(skyboxResolution, skyboxResolution))
+		
+		local bucket = {}
+		skyboxBuckets[v.Name] = bucket
 
-		image.Parent = v.image
+		for x=1, skyboxResolution - 1 do
+			for y=1, skyboxResolution - 1 do
+				local position = V2(x, y)
+				local colorAtPixel = image:ReadPixels(position, V2(1, 1))
+				colorAtPixel = color3new(colorAtPixel[1], colorAtPixel[2], colorAtPixel[3])
+				
+				local calculatedWorldPosition: Vector2 = position - (V2(skyboxResolution, skyboxResolution) / 2)
+				
+				bucket[hash2D(calculatedWorldPosition, skyboxBucketCellSize)] = colorAtPixel:ToHex()
+			end
+		end
+		
+		image:Destroy()
 	end
 end
 updateSkyboxImages()
 
-local function raycastUntilColor(origin, direction, length, ignoreList)
-	local raycastParams = RaycastParams.new()
+local cachedClockTime, lastUpdatedClockTime = Lighting.ClockTime, tick()
+local function raycastUntilColor(origin: Vector3, direction: Vector3, length: number, ignoreList: {})
 	raycastParams.FilterDescendantsInstances = ignoreList
-	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-	raycastParams.IgnoreWater = false
 
-	local raycastResult = workspace:Raycast(origin, direction * length, raycastParams)
+	local raycastResult = CurrentWorkspace:Raycast(origin, direction * length, raycastParams)
 
 	if not raycastResult or not raycastResult.Instance then
 		-- No hit, return a guess at sky color
-
-		local clockTime = Lighting.ClockTime
-		local distFromNoon = math.abs(12 - clockTime) / 12
-		local noise = math.noise(origin.X * 70, origin.Y * 70, origin.Z * 70) / 10
-		local lightness = lerp(0, 0.8, distFromNoon + noise)
+		
+		-- Clock time is semi-expensive to get, so fetch every so often
+		local currentClockTime = tick()
+		if (currentClockTime - lastUpdatedClockTime) > 2 then
+			cachedClockTime = Lighting.ClockTime
+			lastUpdatedClockTime = currentClockTime
+		end
+		
+		-- Calculate lightness used for tinting pixel lightness depending on time of day
+		local distFromNoon = math.abs(12 - cachedClockTime) / 12
+		local lightness = lerp(0, 0.8, distFromNoon)
+		
 		-- Raycast "fake" skybox and get color at point
+		local calculatedColorAtPoint, alpha = color3new(0, 0, 0), 1
 
-		local calculatedColorAtPoint, alpha = Color3.fromRGB(0, 0, 0), 1
-
-		local raycastParamsSkybox = RaycastParams.new()
-		raycastParamsSkybox.FilterDescendantsInstances = skybox:GetChildren()
-		raycastParamsSkybox.FilterType = Enum.RaycastFilterType.Include
-
-		local raycastResultSkybox = workspace:Raycast(Vector3.new(0, 0, 0), direction * 3.1144, raycastParamsSkybox)
+		local raycastResultSkybox = CurrentWorkspace:Raycast(V3(0, 0, 0), direction * 3.1144, raycastParamsSkybox)
 
 		if raycastResultSkybox then
 			local skyboxFace = raycastResultSkybox.Instance
-
 			local calculatedPositionLocal = skyboxFace.CFrame:ToObjectSpace(CFrame.new(raycastResultSkybox.Position)).Position
-			calculatedPositionLocal = (Vector2.new(calculatedPositionLocal.X, calculatedPositionLocal.Y) + Vector2.new(0.5, 0.5)) * skyboxResolution
-			local pixels = skyboxFace.image.EditableImage:ReadPixels(calculatedPositionLocal, Vector2.new(1, 1))
-
-			calculatedColorAtPoint, alpha = Color3.new(pixels[1], pixels[2], pixels[3]), pixels[4]
+			
+			calculatedColorAtPoint = color3fromHEX(skyboxBuckets[skyboxFace.Name][hash2D(V2(calculatedPositionLocal.X, calculatedPositionLocal.Y) * skyboxResolution, skyboxBucketCellSize)] or "434343")
 		end
 		
 		local h, s, v = calculatedColorAtPoint:ToHSV()
-		v = math.clamp(v - lightness, 0, 1)
-		calculatedColorAtPoint = Color3.fromHSV(h, s, v)
+		v = clamp(v - lightness, 0, 1)
+		calculatedColorAtPoint = color3fromHSV(h, s, v)
 
 		return { calculatedColorAtPoint.R, calculatedColorAtPoint.G, calculatedColorAtPoint.B, alpha }
 	end
@@ -142,6 +195,6 @@ local function raycastUntilColor(origin, direction, length, ignoreList)
 end
 
 return function(queryPoint: Vector2): { number }
-	local ray = workspace.CurrentCamera:ViewportPointToRay(queryPoint.X, queryPoint.Y, 0)
+	local ray = CurrentWorkspace.CurrentCamera:ScreenPointToRay(queryPoint.X, queryPoint.Y, 0)
 	return raycastUntilColor(ray.Origin, ray.Direction, 500, {})
 end
