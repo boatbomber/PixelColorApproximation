@@ -40,7 +40,7 @@ local function raycastUntilColor(origin, direction, length, ignoreList)
 		end
 	end
 
-	if hit.Transparency >= 0.95 then
+	if (1 - hit.Transparency) * (1 - hit.LocalTransparencyModifier) <= 0.05 then
 		-- Pass through it
 		table.insert(ignoreList, hit)
 		return raycastUntilColor(raycastResult.Position, direction, length - raycastResult.Distance, ignoreList)
