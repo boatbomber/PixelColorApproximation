@@ -73,17 +73,35 @@ function Utils.getSkyboxFaceAndCoords(lookDirection: Vector3): (string, number, 
 
 	-- Determine the primary direction of the lookDirection vector and calculate 2D coordinates
 	if absX > absY and absX > absZ then
-		face = lookDirection.X < 0 and "SkyboxRt" or "SkyboxLf"
-		u = (lookDirection.Z / absX + 1) / 2
-		v = (lookDirection.Y / absX + 1) / 2
+		if lookDirection.X < 0 then
+			face = "SkyboxRt"
+			u = 1 - (lookDirection.Z / absX + 1) / 2
+			v = (lookDirection.Y / absX + 1) / 2
+		else
+			face = "SkyboxLf"
+			u = (lookDirection.Z / absX + 1) / 2
+			v = (lookDirection.Y / absX + 1) / 2
+		end
 	elseif absY > absZ then
-		face = lookDirection.Y > 0 and "SkyboxUp" or "SkyboxDn"
-		u = (lookDirection.X / absY + 1) / 2
-		v = (lookDirection.Z / absY + 1) / 2
+		if lookDirection.Y > 0 then
+			face = "SkyboxUp"
+			u = 1 - (lookDirection.Z / absY + 1) / 2
+			v = (lookDirection.X / absY + 1) / 2
+		else
+			face = "SkyboxDn"
+			u = 1 - (lookDirection.Z / absY + 1) / 2
+			v = 1 - (lookDirection.X / absY + 1) / 2
+		end
 	else
-		face = lookDirection.Z < 0 and "SkyboxFt" or "SkyboxBk"
-		u = (lookDirection.X / absZ + 1) / 2
-		v = (lookDirection.Y / absZ + 1) / 2
+		if lookDirection.Z < 0 then
+			face = "SkyboxFt"
+			u = (lookDirection.X / absZ + 1) / 2
+			v = (lookDirection.Y / absZ + 1) / 2
+		else
+			face = "SkyboxBk"
+			u = 1 - (lookDirection.X / absZ + 1) / 2
+			v = (lookDirection.Y / absZ + 1) / 2
+		end
 	end
 
 	-- Invert v to map the coordinate system correctly
