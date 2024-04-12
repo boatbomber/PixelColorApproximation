@@ -1,31 +1,14 @@
-local AssetService = game:GetService("AssetService")
-
-local Utils = require(script.Parent.Parent.Utils)
+local Utils = require(script.Parent.Parent.Parent.Utils)
 local defaultHandler = require(script.Parent.default)
 
-local DOWNSCALE_FACTOR = 0.5 -- Sample images at half resolution to improve performance
-
-local imageCache = {}
 return function(queryPoint: Vector2, gui: ImageLabel | ImageButton): { number }
 	local color = defaultHandler(queryPoint, gui)
 	if gui.ImageTransparency == 1 or gui.Image == "" or gui.IsLoaded == false then
 		return color
 	end
 
-	local success, image = pcall(function()
-		if gui:FindFirstChildWhichIsA("EditableImage") then
-			return gui:FindFirstChildWhichIsA("EditableImage")
-		end
-
-		if imageCache[gui.Image] then
-			return imageCache[gui.Image]
-		end
-		local editableImage = AssetService:CreateEditableImageAsync(gui.Image)
-		editableImage:Resize(editableImage.Size * DOWNSCALE_FACTOR)
-		imageCache[gui.Image] = editableImage
-		return editableImage
-	end)
-	if not success then
+	local image, isDownscaled = Utils.getEditableImage(gui)
+	if not image then
 		return color
 	end
 
@@ -71,10 +54,11 @@ return function(queryPoint: Vector2, gui: ImageLabel | ImageButton): { number }
 		--TODO: elseif object.ScaleType == Enum.ScaleType.Crop then
 	end
 
-	local rectSize = gui.ImageRectSize * DOWNSCALE_FACTOR / image.Size
+	local downScaleFactor = (if isDownscaled then Utils.IMAGE_DOWNSCALE_FACTOR else 1)
+	local rectSize = gui.ImageRectSize * downScaleFactor / image.Size
 	if rectSize.X ~= 0 or rectSize.Y ~= 0 then
 		-- Adjust queryInImageSpace based on rect cutout
-		local rectPos = gui.ImageRectOffset * DOWNSCALE_FACTOR / image.Size
+		local rectPos = gui.ImageRectOffset * downScaleFactor / image.Size
 		queryInImageSpace = Vector2.new(
 			math.clamp(queryInImageSpace.X * rectSize.X + rectPos.X, 0, 1),
 			math.clamp(queryInImageSpace.Y * rectSize.Y + rectPos.Y, 0, 1)

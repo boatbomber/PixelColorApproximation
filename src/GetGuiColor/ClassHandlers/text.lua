@@ -1,4 +1,4 @@
-local Utils = require(script.Parent.Parent.Utils)
+local Utils = require(script.Parent.Parent.Parent.Utils)
 local defaultHandler = require(script.Parent.default)
 
 return function(queryPoint: Vector2, gui: TextBox | TextLabel | TextButton): { number }

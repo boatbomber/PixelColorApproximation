@@ -1,7 +1,53 @@
 local Terrain = workspace.Terrain
 local Lighting = game:GetService("Lighting")
 
+local Utils = require(script.Parent.Utils)
+
+local currentSkybox = Lighting:FindFirstChildWhichIsA("Sky")
+Lighting.ChildAdded:Connect(function(child)
+	if child:IsA("Sky") then
+		currentSkybox = child
+	end
+end)
+Lighting.ChildRemoved:Connect(function(child)
+	if child == currentSkybox then
+		currentSkybox = Lighting:FindFirstChildWhichIsA("Sky")
+	end
+end)
+
 local nightColor, dayColor = Color3.fromRGB(2, 7, 30), Color3.fromRGB(89, 178, 210)
+local function estimateDefaultSky(origin: Vector3): { number }
+	-- No skybox, just roughly estimate the default blue sky
+	local clockTime = Lighting.ClockTime
+	local distFromNoon = math.abs(12 - clockTime) / 12
+	local noise = math.noise(origin.X * 70, origin.Y * 70, origin.Z * 70) / 10
+	local color = dayColor:Lerp(nightColor, distFromNoon + noise)
+
+	return { color.R, color.G, color.B, 1 }
+end
+
+local function getSkyboxColor(origin: Vector3, direction: Vector3): { number }
+	if not currentSkybox then
+		return estimateDefaultSky(origin)
+	end
+
+	local skyboxFace, u, v = Utils.getSkyboxFaceAndCoords(direction.Unit)
+	local skyboxTexture = currentSkybox[skyboxFace]
+	local skyboxImage = Utils.getEditableImage(skyboxTexture)
+	if not skyboxImage then
+		return estimateDefaultSky(origin)
+	end
+	local skyboxImageSize = skyboxImage.Size
+	local imageColor = skyboxImage:ReadPixels(
+		Vector2.new(
+			math.clamp(math.floor(u * skyboxImageSize.X), 0, skyboxImageSize.X - 1),
+			math.clamp(math.floor(v * skyboxImageSize.Y), 0, skyboxImageSize.Y - 1)
+		),
+		Vector2.one
+	)
+
+	return imageColor or estimateDefaultSky(origin)
+end
 
 local function raycastUntilColor(origin, direction, length, ignoreList)
 	local raycastParams = RaycastParams.new()
@@ -12,14 +58,7 @@ local function raycastUntilColor(origin, direction, length, ignoreList)
 	local raycastResult = workspace:Raycast(origin, direction * length, raycastParams)
 
 	if not raycastResult or not raycastResult.Instance then
-		-- No hit, return a guess at sky color
-		-- TODO: Consider sampling skybox images for real?
-		local clockTime = Lighting.ClockTime
-		local distFromNoon = math.abs(12 - clockTime) / 12
-		local noise = math.noise(origin.X * 70, origin.Y * 70, origin.Z * 70) / 10
-		local color = dayColor:Lerp(nightColor, distFromNoon + noise)
-
-		return { color.R, color.G, color.B, 1 }
+		return getSkyboxColor(origin, direction)
 	end
 
 	-- We should techincally be casting through semi-transparent objects and blending the result,
@@ -54,6 +93,6 @@ local function raycastUntilColor(origin, direction, length, ignoreList)
 end
 
 return function(queryPoint: Vector2): { number }
-	local ray = workspace.CurrentCamera:ViewportPointToRay(queryPoint.X, queryPoint.Y, 0)
+	local ray = workspace.CurrentCamera:ScreenPointToRay(queryPoint.X, queryPoint.Y, 0)
 	return raycastUntilColor(ray.Origin, ray.Direction, 500, {})
 end
